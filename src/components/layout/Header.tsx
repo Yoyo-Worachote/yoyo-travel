@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { Menu, X, Search, LogIn, LogOut } from "lucide-react";
+import { Menu, X, Search, LogIn, UserRound } from "lucide-react";
 import { Logo } from "./Logo";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useTravelStore } from "@/components/providers/TravelStoreProvider";
@@ -21,41 +21,47 @@ const NAV = [
 
 function AuthControl({ compact = false }: { compact?: boolean }) {
   const t = useTranslations("auth");
-  const { mode, user, signOut } = useTravelStore();
+  const pathname = usePathname();
+  const { mode, user, authConfigured, syncStatus } = useTravelStore();
+  const next = encodeURIComponent(pathname || "/");
   if (mode === "loading") return <span className="inline-block h-9 w-24 rounded-full skeleton" aria-hidden="true" />;
-  if (mode === "demo") {
-    return (
-      <Link href="/login" className="badge bg-gold-soft text-[#7a5a17]" title={t("demoBanner")}>
-        {t("demoMode")}
-      </Link>
-    );
-  }
   if (mode === "cloud" && user) {
-    const name = (user.user_metadata?.full_name as string) || user.email || "";
+    const name = (user.user_metadata?.display_name as string) || (user.user_metadata?.full_name as string) || user.email || "";
     const avatar = user.user_metadata?.avatar_url as string | undefined;
     return (
-      <div className="flex items-center gap-2">
+      <Link href="/account" className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3 hover:bg-forest-50" title={t("signedInAs", { name })}>
         {avatar ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={avatar} alt="" width={32} height={32} className="h-8 w-8 rounded-full" referrerPolicy="no-referrer" />
         ) : (
           <span className="grid h-8 w-8 place-items-center rounded-full bg-forest-100 text-sm font-bold text-forest-800">
-            {name.slice(0, 1).toUpperCase()}
+            <UserRound className="h-4 w-4" aria-hidden="true" />
           </span>
         )}
-        {!compact && <span className="sr-only">{t("signedInAs", { name })}</span>}
-        <button type="button" onClick={signOut} className="btn btn-ghost btn-sm" aria-label={t("signOut")}>
-          <LogOut className="h-4 w-4" aria-hidden="true" />
-          <span className={compact ? "" : "hidden xl:inline"}>{t("signOut")}</span>
-        </button>
-      </div>
+        <span className={`max-w-28 truncate text-sm font-medium ${compact ? "" : "hidden 2xl:inline"}`}>{name}</span>
+        <span className="sr-only">{t("account")}</span>
+        {syncStatus === "saving" && <span className="h-2 w-2 rounded-full bg-gold" aria-label={t("saving")} />}
+        {syncStatus === "error" && <span className="h-2 w-2 rounded-full bg-clay" aria-label={t("saveFailedShort")} />}
+      </Link>
+    );
+  }
+  if (!authConfigured) {
+    return (
+      <Link href="/login" className="badge bg-gold-soft text-[#7a5a17]" title={t("demoBanner")}>
+        {t("guestMode")}
+      </Link>
     );
   }
   return (
-    <Link href="/login" className="btn btn-primary btn-sm">
-      <LogIn className="h-4 w-4" aria-hidden="true" />
-      {t("signIn")}
-    </Link>
+    <div className="flex items-center gap-1">
+      <Link href={`/login?next=${next}`} className="btn btn-ghost btn-sm">
+        <LogIn className="h-4 w-4" aria-hidden="true" />
+        {t("signIn")}
+      </Link>
+      <Link href={`/register?next=${next}`} className="btn btn-primary btn-sm">
+        {t("register")}
+      </Link>
+    </div>
   );
 }
 
@@ -95,7 +101,7 @@ export function Header() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
-          <Link href="/search" className="btn btn-ghost btn-sm" aria-label={t("search")}>
+          <Link href="/places" className="btn btn-ghost btn-sm" aria-label={t("search")}>
             <Search className="h-5 w-5" aria-hidden="true" />
           </Link>
           <LanguageSwitcher />

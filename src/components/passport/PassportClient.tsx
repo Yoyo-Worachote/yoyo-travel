@@ -18,20 +18,6 @@ export function PassportClient({ provinces }: { provinces: ProvinceSummary[] }) 
   const { state, mode } = useTravelStore();
 
   if (mode === "loading") return <div className="h-96 rounded-[var(--radius-card)] skeleton" aria-hidden="true" />;
-  if (mode === "guest") {
-    return (
-      <EmptyState
-        title={t("auth.signInRequired")}
-        body={t("auth.signInToSave")}
-        action={
-          <Link href="/login?next=/passport" className="btn btn-primary">
-            {t("auth.signIn")}
-          </Link>
-        }
-      />
-    );
-  }
-
   const m = computePassport(state, provinces);
   const pBySlug = new Map(provinces.map((p) => [p.slug, p]));
   const pName = (slug: string) => {

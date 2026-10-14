@@ -36,6 +36,8 @@ export interface RandomPlace {
   lng: number;
   fee?: "free" | "paid" | null;
   openingHours?: string | null;
+  /** sourced price only (see pricing.ts) */
+  price?: { min: number; max: number; perPerson: boolean } | null;
 }
 
 export interface RandomProvince {
@@ -186,44 +188,81 @@ export function randomPlace(
 
 export interface TripStop {
   placeId: string;
-  role: "sight" | "food" | "activity";
+  role: "sight" | "food" | "activity" | "stay";
   kmFromPrevious: number | null;
   openingHours: string | null;
+  /** sourced cost for the whole group (min–max), or null when unknown */
+  cost: { min: number; max: number } | null;
 }
+
+export type TripWarning =
+  | "few_places"
+  | "no_food_data"
+  | "no_stay_data"
+  | "opening_hours_unknown"
+  | "straight_line_distance"
+  | "budget_unverifiable"
+  | "known_cost_exceeds_budget";
 
 export interface TripPlan {
   provinceSlug: string;
   days: Array<{ day: number; stops: TripStop[] }>;
-  warnings: Array<"few_places" | "no_food_data" | "opening_hours_unknown" | "straight_line_distance">;
+  warnings: TripWarning[];
+  /** sum of sourced prices only; unpriced stops are counted separately, never as 0 */
+  knownCost: { min: number; max: number };
+  unpricedStops: number;
+  travelers: number;
 }
 
 const FOOD_CATS = ["restaurant", "cafe", "market"];
 
+export interface TripOptions {
+  provinceSlug: string;
+  days: number;
+  interests?: Interest[];
+  companion?: Companion | null;
+  excludePlaceIds?: string[];
+  travelers?: number;
+  budget?: number | null;
+  /** only use places whose opening hours are known */
+  requireKnownHours?: boolean;
+}
+
 /**
  * Build a 1–3 day outline from real records: each day starts at a random
- * sight, adds the nearest unused sights (≤ 35 km), then the nearest food stop.
- * Distances are straight-line, so the order is approximate.
+ * sight, adds the nearest unused sights (≤ 35 km), then the nearest food stop,
+ * and (except on the last day) the nearest accommodation. Distances are
+ * straight-line, so the order is approximate. Returns null when the data
+ * cannot support a plan — never invents stops.
  */
-export function randomTrip(
-  places: RandomPlace[],
-  opts: { provinceSlug: string; days: number; interests?: Interest[]; companion?: Companion | null; excludePlaceIds?: string[] },
-  rng: () => number = Math.random,
-): TripPlan | null {
+export function randomTrip(places: RandomPlace[], opts: TripOptions, rng: () => number = Math.random): TripPlan | null {
   const days = Math.max(1, Math.min(3, Math.round(opts.days)));
+  const travelers = Math.max(1, Math.min(50, Math.round(opts.travelers ?? 1)));
   const exclude = new Set(opts.excludePlaceIds ?? []);
-  const inProvince = places.filter((p) => p.provinceSlug === opts.provinceSlug && !exclude.has(p.id));
+  const inProvince = places.filter(
+    (p) => p.provinceSlug === opts.provinceSlug && !exclude.has(p.id) && (!opts.requireKnownHours || !!p.openingHours),
+  );
   const sightPool = inProvince.filter((p) => p.kind === "attraction" || p.kind === "activity");
   const interestCats = opts.interests?.length ? new Set(opts.interests.flatMap((i) => INTEREST_CATEGORIES[i])) : null;
   const preferred = interestCats ? sightPool.filter((p) => interestCats.has(p.category)) : sightPool;
   const sights = preferred.length >= days ? preferred : sightPool;
   const food = inProvince.filter((p) => FOOD_CATS.includes(p.category) && p.kind !== "attraction");
   const foodAll = food.length ? food : inProvince.filter((p) => FOOD_CATS.includes(p.category));
+  const stays = inProvince.filter((p) => p.kind === "accommodation");
   if (!sights.length) return null;
 
   const used = new Set<string>();
-  const warnings: TripPlan["warnings"] = ["straight_line_distance"];
+  const warnings: TripWarning[] = ["straight_line_distance"];
   const outDays: TripPlan["days"] = [];
   const perDay = 3;
+  const nearest = (pool: RandomPlace[], from: RandomPlace, maxKm: number) =>
+    pool
+      .filter((f) => !used.has(f.id))
+      .map((f) => ({ f, km: haversineKm([from.lat, from.lng], [f.lat, f.lng]) }))
+      .filter((x) => x.km <= maxKm)
+      .sort((a, b) => a.km - b.km)[0]?.f;
+  const costOf = (p: RandomPlace) =>
+    p.price ? { min: p.price.min * (p.price.perPerson ? travelers : 1), max: p.price.max * (p.price.perPerson ? travelers : 1) } : null;
 
   for (let d = 1; d <= days; d++) {
     const free = sights.filter((s) => !used.has(s.id));
@@ -243,25 +282,39 @@ export function randomTrip(
     }
     const ordered = orderByNearest(daySights);
     const last = ordered[ordered.length - 1];
-    const meal = foodAll
-      .filter((f) => !used.has(f.id))
-      .map((f) => ({ f, km: haversineKm([last.lat, last.lng], [f.lat, f.lng]) }))
-      .filter((x) => x.km <= 25)
-      .sort((a, b) => a.km - b.km)[0]?.f;
-    const seq: RandomPlace[] = meal ? [...ordered, meal] : ordered;
+    const meal = nearest(foodAll, last, 25);
     if (meal) used.add(meal.id);
+    const stay = d < days ? nearest(stays, meal ?? last, 40) : undefined;
+    if (stay) used.add(stay.id);
+    const seq: RandomPlace[] = [...ordered, ...(meal ? [meal] : []), ...(stay ? [stay] : [])];
     outDays.push({
       day: d,
       stops: seq.map((p, i) => ({
         placeId: p.id,
-        role: FOOD_CATS.includes(p.category) && p.kind !== "attraction" ? "food" : p.kind === "activity" ? "activity" : "sight",
+        role:
+          p.kind === "accommodation"
+            ? "stay"
+            : FOOD_CATS.includes(p.category) && p.kind !== "attraction"
+              ? "food"
+              : p.kind === "activity"
+                ? "activity"
+                : "sight",
         kmFromPrevious: i === 0 ? null : Math.round(haversineKm([seq[i - 1].lat, seq[i - 1].lng], [p.lat, p.lng]) * 10) / 10,
         openingHours: p.openingHours ?? null,
+        cost: costOf(p),
       })),
     });
   }
+  const all = outDays.flatMap((d) => d.stops);
+  const knownCost = all.reduce((acc, s) => (s.cost ? { min: acc.min + s.cost.min, max: acc.max + s.cost.max } : acc), { min: 0, max: 0 });
+  const unpricedStops = all.filter((s) => !s.cost).length;
   if (outDays.length < days || outDays.some((d) => d.stops.length < 2)) warnings.push("few_places");
-  if (!outDays.some((d) => d.stops.some((s) => s.role === "food"))) warnings.push("no_food_data");
-  if (outDays.some((d) => d.stops.some((s) => !s.openingHours))) warnings.push("opening_hours_unknown");
-  return { provinceSlug: opts.provinceSlug, days: outDays, warnings };
+  if (!all.some((s) => s.role === "food")) warnings.push("no_food_data");
+  if (days > 1 && !all.some((s) => s.role === "stay")) warnings.push("no_stay_data");
+  if (all.some((s) => !s.openingHours)) warnings.push("opening_hours_unknown");
+  if (opts.budget != null) {
+    if (knownCost.min > opts.budget) warnings.push("known_cost_exceeds_budget");
+    if (unpricedStops > 0) warnings.push("budget_unverifiable");
+  }
+  return { provinceSlug: opts.provinceSlug, days: outDays, warnings, knownCost, unpricedStops, travelers };
 }

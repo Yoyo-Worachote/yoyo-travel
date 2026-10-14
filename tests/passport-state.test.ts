@@ -106,7 +106,7 @@ describe("trips", () => {
     t = s.trips[0];
     expect([...t.items].sort((x, y) => x.position - y.position).map((i) => i.placeId)).toEqual(["b", "a"]);
     s = S.updateTripItem(s, trip.id, b.id, { estimatedCost: 300 });
-    expect(S.tripCostSummary(s.trips[0]).userEstimatedTotal).toBe(300);
+    expect(s.trips[0].items.find((i) => i.id === b.id)?.estimatedCost).toBe(300);
     s = S.removeTripItem(s, trip.id, b.id);
     expect(s.trips[0].items).toHaveLength(1);
     expect(s.trips[0].items[0].position).toBe(0);

@@ -32,7 +32,7 @@ export interface Province {
   fetchedAt: string;
 }
 
-export type PlaceKind = "attraction" | "restaurant" | "cafe" | "accommodation" | "activity";
+export type PlaceKind = "attraction" | "restaurant" | "cafe" | "accommodation" | "activity" | "transport";
 
 export type DataProvider = "wikidata" | "osm" | "manual";
 
@@ -69,6 +69,15 @@ export interface Place {
   cuisine?: string[] | null;
   stars?: number | null;
   fee?: "free" | "paid" | null;
+  /** OSM charge tag: structured only for unambiguous THB amounts */
+  charge?: { min?: number; max?: number; currency?: string; raw: string } | null;
+  address?: string | null;
+  phone?: string | null;
+  amenities?: string[];
+  rooms?: number | null;
+  brand?: string | null;
+  /** official/authorised booking page — only when a source provides one */
+  bookingUrl?: string | null;
   label?: DataLabel;
   source: PlaceSource;
 }
@@ -87,6 +96,9 @@ export interface PlaceSummary {
   image: ImageInfo | null;
   fee?: "free" | "paid" | null;
   provider: DataProvider;
+  priceType?: "exact" | "range" | "unavailable";
+  priceMin?: number | null;
+  amenities?: string[];
 }
 
 export interface ProvinceSummary {

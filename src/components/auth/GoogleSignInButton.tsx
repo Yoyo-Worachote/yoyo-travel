@@ -4,10 +4,8 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { getBrowserSupabase } from "@/lib/supabase/client";
+import { safeNext } from "@/lib/auth/rules";
 
-function safeNext(next: string | null): string {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/passport";
-}
 
 export function GoogleSignInButton({ next }: { next: string | null }) {
   const t = useTranslations("auth");
@@ -20,7 +18,7 @@ export function GoogleSignInButton({ next }: { next: string | null }) {
     setError(false);
     const { error } = await sb.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext(next))}` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext(next, "/"))}` },
     });
     if (error) {
       setError(true);
@@ -40,7 +38,7 @@ export function GoogleSignInButton({ next }: { next: string | null }) {
             <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
           </svg>
         )}
-        {t("signInGoogle")}
+        {t("continueGoogle")}
       </button>
       {error && (
         <p role="alert" className="text-sm text-clay">

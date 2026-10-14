@@ -2,15 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
-import { ArrowLeft, Clock, ExternalLink, Globe, MapPin, Navigation, Ticket, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, BedDouble, CalendarCheck, Clock, ExternalLink, Globe, Home, MapPin, Navigation, Phone, Sparkles, Star, Ticket, UtensilsCrossed } from "lucide-react";
 import { SetChatContext } from "@/components/chat/ChatContext";
 import { AskAiButtons } from "@/components/chat/AskAiButtons";
 import { PointsMap } from "@/components/map/PointsMap";
 import { PlaceActions } from "@/components/place/PlaceActions";
+import { LiveProviderInfo } from "@/components/place/LiveProviderInfo";
 import { DataLabelBadge } from "@/components/ui/DataLabel";
 import { cleanAuthor, Photo, PhotoCredit } from "@/components/ui/Photo";
 import { getNearbyPlaces, getPlaceBySlug, getProvince } from "@/lib/catalog";
-import { altName, formatDate, localName, localText } from "@/lib/display";
+import { altName, formatBaht, formatDate, localName, localText } from "@/lib/display";
+import { priceInfo } from "@/lib/pricing";
 import { googleMapsDirectionsUrl, osmUrl } from "@/lib/geo";
 import { ensureLiveCatalog } from "@/lib/catalog-live";
 
@@ -45,6 +47,8 @@ export default async function PlacePage({ params }: Params) {
   const wiki = locale === "en" ? place.wikipediaEn ?? place.wikipediaTh : place.wikipediaTh ?? place.wikipediaEn;
   const nearby = getNearbyPlaces(place, 6);
   const provName = localName(province, locale);
+  const price = priceInfo(place);
+  const priceLink = place.bookingUrl ?? place.website ?? null;
 
   return (
     <>
@@ -132,9 +136,109 @@ export default async function PlacePage({ params }: Params) {
             <div className="flex gap-3 p-4">
               <Ticket className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
               <div>
-                <dt className="font-semibold">{t("place.price")}</dt>
+                <dt className="font-semibold">{t(`place.priceUnit.${price.unit}`)}</dt>
                 <dd>
-                  {place.fee === "free" ? t("place.feeFree") : place.fee === "paid" ? t("place.feePaid") : <span className="muted">{t("place.priceUnknown")}</span>}
+                  {price.type === "exact" || price.type === "range" ? (
+                    <>
+                      <span className="font-semibold">
+                        {price.free
+                          ? t("place.free")
+                          : price.type === "exact"
+                            ? formatBaht(price.min!, locale)
+                            : `${formatBaht(price.min!, locale)} – ${formatBaht(price.max!, locale)}`}
+                      </span>{" "}
+                      <span className="badge">{t(`place.priceType.${price.type}`)}</span>
+                      <span className="block text-xs muted">
+                        {t("place.priceSource", { source: price.source ?? "", date: formatDate(price.observedAt, locale) })}
+                        {price.raw && !price.free ? ` · "${price.raw}"` : ""}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="muted">{t("place.priceUnknown")}</span>
+                      {price.paidUnknownAmount && <span className="block text-xs muted">{t("place.feePaid")}</span>}
+                      {price.raw && <span className="block text-xs muted">{t("place.priceRaw", { raw: price.raw })}</span>}
+                      {priceLink && (
+                        <a href={priceLink} target="_blank" rel="noopener noreferrer nofollow" className="block text-xs text-forest-700 underline">
+                          {t("place.checkPriceAtSource")}
+                        </a>
+                      )}
+                    </>
+                  )}
+                </dd>
+              </div>
+            </div>
+            <div className="flex gap-3 p-4">
+              <Star className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+              <div className="min-w-0">
+                <dt className="font-semibold">{t("place.providerRating")}</dt>
+                <dd>
+                  <LiveProviderInfo placeId={place.id} />
+                </dd>
+              </div>
+            </div>
+            {place.address && (
+              <div className="flex gap-3 p-4">
+                <Home className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+                <div>
+                  <dt className="font-semibold">{t("place.address")}</dt>
+                  <dd>{place.address}</dd>
+                </div>
+              </div>
+            )}
+            {place.phone && (
+              <div className="flex gap-3 p-4">
+                <Phone className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+                <div>
+                  <dt className="font-semibold">{t("place.phone")}</dt>
+                  <dd>
+                    <a href={`tel:${place.phone.replace(/[^\d+]/g, "")}`} className="text-forest-700 underline">
+                      {place.phone}
+                    </a>
+                  </dd>
+                </div>
+              </div>
+            )}
+            {place.amenities && place.amenities.length > 0 && (
+              <div className="flex gap-3 p-4">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+                <div>
+                  <dt className="font-semibold">{t("place.amenities")}</dt>
+                  <dd className="mt-1 flex flex-wrap gap-1">
+                    {place.amenities.map((a) => (
+                      <span key={a} className="badge">
+                        {t(`amenity.${a}`)}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              </div>
+            )}
+            {(place.stars || place.rooms) && (
+              <div className="flex gap-3 p-4">
+                <BedDouble className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+                <div>
+                  <dt className="font-semibold">{t("place.lodging")}</dt>
+                  <dd>
+                    {place.stars ? `${t("place.stars")}: ${place.stars}` : ""}
+                    {place.stars && place.rooms ? " · " : ""}
+                    {place.rooms ? t("place.rooms", { count: place.rooms }) : ""}
+                  </dd>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-3 p-4">
+              <CalendarCheck className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
+              <div>
+                <dt className="font-semibold">{t("place.booking")}</dt>
+                <dd>
+                  {place.bookingUrl ? (
+                    <a href={place.bookingUrl} target="_blank" rel="noopener noreferrer nofollow" className="text-forest-700 underline">
+                      {t("place.bookOfficial")}
+                    </a>
+                  ) : (
+                    <span className="muted">{t("place.noBookingLink")}</span>
+                  )}
                 </dd>
               </div>
             </div>
@@ -144,15 +248,6 @@ export default async function PlacePage({ params }: Params) {
                 <div>
                   <dt className="font-semibold">{t("place.cuisine")}</dt>
                   <dd>{place.cuisine.join(", ").replace(/_/g, " ")}</dd>
-                </div>
-              </div>
-            ) : null}
-            {place.stars ? (
-              <div className="flex gap-3 p-4">
-                <span className="mt-0.5 w-4 text-center text-gold" aria-hidden="true">★</span>
-                <div>
-                  <dt className="font-semibold">{t("place.stars")}</dt>
-                  <dd>{place.stars}</dd>
                 </div>
               </div>
             ) : null}
@@ -179,6 +274,14 @@ export default async function PlacePage({ params }: Params) {
                   </a>
                   <a href={osmUrl(place.lat, place.lng)} target="_blank" rel="noopener noreferrer" className="text-forest-700 underline">
                     {t("common.openInOsm")}
+                  </a>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.nameEn ?? place.nameTh ?? ""} ${place.lat},${place.lng}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-forest-700 underline"
+                  >
+                    {t("place.findOnGoogleMaps")}
                   </a>
                   <span className="text-xs muted">
                     {t("place.coordinates")}: {place.lat.toFixed(5)}, {place.lng.toFixed(5)}

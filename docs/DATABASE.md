@@ -51,6 +51,24 @@ erDiagram
   places ||--o{ user_trip_items : "stop"
 ```
 
+## Migration 20261015000000_accounts_trips_places (additive)
+
+Safe to apply on an existing database (tested in `tests/accounts.test.ts` on top of existing rows):
+
+- `profiles.username` (unique, `^[a-z0-9_]{3,20}$`, nullable for Google sign-ins) — set from
+  sign-up metadata by `handle_new_user`; a duplicate fails sign-up atomically.
+- `username_available(text)` — anon-callable, returns only a boolean.
+- `auth_email_for_username(text)` — **service_role only** (username sign-in on the server).
+- `delete_my_account()` — authenticated; deletes the caller's auth user, all private rows cascade.
+- `user_trips`: `description`, `traveler_count` (1–50), `currency` (default THB), `status`,
+  `travel_styles[]`, `transport_mode`.
+- `user_trip_items`: `start_time`, `end_time`, `cost_category`, `actual_cost` (estimates and
+  actuals are separate columns).
+- `user_trip_expenses` (new, owner-only RLS): costs not tied to a place, `estimated`/`actual`.
+- `places`: kind `transport`, `address`, `phone`, `amenities[]`, `booking_url` (https only).
+- `price_observations.provenance` adds `provider_data` (e.g. OSM `charge` tags).
+- `place_ratings` (new): ratings only from a licensed provider with source and fetch time.
+
 ## Tables
 
 | Table | Purpose | Key constraints |
@@ -69,7 +87,8 @@ erDiagram
 | `user_province_progress` | Province status: `visited` / `want` (absent = not visited) | PK `(user_id, province_slug)` |
 | `user_place_visits` | Visit date, private note, rating 1–5, tags, photo paths, `is_public=false` | unique `(user_id, place_id)` |
 | `user_wishlist` | Places the user wants to visit | PK `(user_id, place_id)` |
-| `user_trips`, `user_trip_items` | Trip plans; items by day/position with user-entered cost estimate | unique `(trip_id, place_id)`; item's trip must belong to the same user |
+| `user_trips`, `user_trip_items` | Trip plans; items by day/position with time, cost category, estimate and actual cost | unique `(trip_id, place_id)`; item's trip must belong to the same user |
+| `user_trip_expenses` | Trip costs not tied to a place | owner-only; trip must belong to the same user |
 
 Storage: private bucket `visit-photos`, object path must start with the owner's user id.
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { BedDouble, Clock, Coffee, Ticket, UtensilsCrossed } from "lucide-react";
+import { BedDouble, Bus, Clock, Coffee, Ticket, UtensilsCrossed } from "lucide-react";
 import { localName, altName } from "@/lib/display";
 import type { PlaceSummary } from "@/lib/types";
 
@@ -10,6 +10,7 @@ const ICONS = {
   accommodation: BedDouble,
   activity: Ticket,
   attraction: Ticket,
+  transport: Bus,
 } as const;
 
 /** Compact card for venues that usually have no licensed photo (OSM POIs). */

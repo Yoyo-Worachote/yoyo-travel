@@ -22,20 +22,6 @@ export function WishlistClient({ provinces }: { provinces: Array<{ slug: string;
   };
 
   if (store.mode === "loading") return <div className="h-64 rounded-[var(--radius-card)] skeleton" aria-hidden="true" />;
-  if (store.mode === "guest") {
-    return (
-      <EmptyState
-        title={t("auth.signInRequired")}
-        body={t("auth.signInToSave")}
-        action={
-          <Link href="/login?next=/wishlist" className="btn btn-primary">
-            {t("auth.signIn")}
-          </Link>
-        }
-      />
-    );
-  }
-
   const groups = groupWishlistByProvince(store.state);
   const wantProvinces = Object.entries(store.state.provinces).filter(([, v]) => v.status === "want").map(([s]) => s);
 

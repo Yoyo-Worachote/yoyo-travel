@@ -2,6 +2,7 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import { haversineKm } from "./geo";
+import { priceInfo } from "./pricing";
 import type { Place, PlaceSummary, Province, ProvinceSummary } from "./types";
 
 /**
@@ -125,7 +126,14 @@ export function toPlaceSummary(p: Place): PlaceSummary {
     image: p.image,
     fee: p.fee ?? null,
     provider: p.source.provider,
+    ...summaryPrice(p),
+    amenities: p.amenities ?? [],
   };
+}
+
+function summaryPrice(p: Place): Pick<PlaceSummary, "priceType" | "priceMin"> {
+  const info = priceInfo(p);
+  return { priceType: info.type === "exact" || info.type === "range" ? info.type : "unavailable", priceMin: info.min };
 }
 
 export function getProvinceSummaries(): ProvinceSummary[] {

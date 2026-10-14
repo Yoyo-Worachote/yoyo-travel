@@ -9,6 +9,7 @@ const GEN = path.join(ROOT, "src", "data", "generated");
 const read = async (f) => JSON.parse(await fs.readFile(path.join(GEN, f), "utf8").catch(() => '{"places":[]}'));
 
 const q = (v) => (v == null ? "null" : `'${String(v).replace(/'/g, "''")}'`);
+const arr = (v) => (Array.isArray(v) && v.length ? `array[${v.map(q).join(",")}]::text[]` : "'{}'::text[]");
 const n = (v) => (v == null || Number.isNaN(Number(v)) ? "null" : String(Number(v)));
 
 export const REGIONS = [
@@ -43,6 +44,9 @@ export const CATEGORIES = [
   ["guest_house", "เกสต์เฮาส์", "Guest house"],
   ["motel", "โมเต็ล", "Motel"],
   ["apartment", "อพาร์ตเมนต์ให้เช่า", "Serviced apartment"],
+  ["resort", "รีสอร์ต", "Resort"],
+  ["attraction", "สถานที่ท่องเที่ยว", "Attraction"],
+  ["transport", "การเดินทาง", "Transport hub"],
 ];
 
 async function main() {
@@ -89,16 +93,16 @@ async function main() {
         p.descriptionTh,
       )}, ${q(p.descriptionEn)}, ${n(p.lat)}, ${n(p.lng)}, ${q(p.website)}, ${q(p.openingHours ?? null)}, ${q(
         p.fee ?? null,
-      )}, 'published', 'provider', ${q(p.source.provider)}, ${q(p.source.externalId)}, ${q(p.source.url)}, ${q(
+      )}, ${q(p.address ?? null)}, ${q(p.phone ?? null)}, ${arr(p.amenities)}, 'published', 'provider', ${q(p.source.provider)}, ${q(p.source.externalId)}, ${q(p.source.url)}, ${q(
         p.source.license,
       )}, ${q(p.source.attribution)}, ${q(p.source.fetchedAt)})`,
     );
   }
   for (let i = 0; i < rows.length; i += 500) {
     out.push(
-      "insert into public.places (id, slug, province_slug, kind, category, name_th, name_en, description_th, description_en, lat, lng, website, opening_hours, fee, status, data_label, provider, external_id, source_url, license, attribution, fetched_at) values\n" +
+      "insert into public.places (id, slug, province_slug, kind, category, name_th, name_en, description_th, description_en, lat, lng, website, opening_hours, fee, address, phone, amenities, status, data_label, provider, external_id, source_url, license, attribution, fetched_at) values\n" +
         rows.slice(i, i + 500).join(",\n") +
-        "\non conflict (id) do update set name_th = excluded.name_th, name_en = excluded.name_en, description_th = excluded.description_th, description_en = excluded.description_en, lat = excluded.lat, lng = excluded.lng, website = excluded.website, opening_hours = excluded.opening_hours, fetched_at = excluded.fetched_at;",
+        "\non conflict (id) do update set name_th = excluded.name_th, name_en = excluded.name_en, description_th = excluded.description_th, description_en = excluded.description_en, lat = excluded.lat, lng = excluded.lng, website = excluded.website, opening_hours = excluded.opening_hours, fee = excluded.fee, address = excluded.address, phone = excluded.phone, amenities = excluded.amenities, kind = excluded.kind, category = excluded.category, fetched_at = excluded.fetched_at;",
     );
   }
   const imgs = places.filter((p) => p.image);
@@ -115,6 +119,23 @@ async function main() {
           )
           .join(",\n") +
         "\non conflict (place_id, url) do nothing;",
+    );
+  }
+  // OSM `charge` tags → provider_data price observations (re-generated on each seed run).
+  const priced = places.filter((p) => p.charge && p.charge.min != null);
+  out.push("delete from public.price_observations where provenance = 'provider_data';");
+  if (priced.length) {
+    out.push(
+      "insert into public.price_observations (place_id, price_type, amount_min, amount_max, currency, provenance, source_url, observed_at, note) values\n" +
+        priced
+          .map(
+            (p) =>
+              `(${q(p.id)}, ${q(p.kind === "attraction" ? "admission" : "activity")}, ${n(p.charge.min)}, ${n(p.charge.max)}, 'THB', 'provider_data', ${q(
+                p.source.url,
+              )}, ${q(p.source.fetchedAt.slice(0, 10))}, ${q(`OSM charge: ${p.charge.raw}`)})`,
+          )
+          .join(",\n") +
+        ";",
     );
   }
   out.push("commit;");

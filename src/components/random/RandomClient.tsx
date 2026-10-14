@@ -31,7 +31,20 @@ interface PlaceResult {
 interface TripResult {
   province: { slug: string; nameTh: string; nameEn: string; region: RegionId };
   warnings: string[];
-  days: Array<{ day: number; stops: Array<{ placeId: string; role: "sight" | "food" | "activity"; kmFromPrevious: number | null; openingHours: string | null; place: PlaceSummary }> }>;
+  knownCost: { min: number; max: number };
+  unpricedStops: number;
+  travelers: number;
+  days: Array<{
+    day: number;
+    stops: Array<{
+      placeId: string;
+      role: "sight" | "food" | "activity" | "stay";
+      kmFromPrevious: number | null;
+      openingHours: string | null;
+      cost: { min: number; max: number } | null;
+      place: PlaceSummary;
+    }>;
+  }>;
 }
 
 export function RandomClient({ provinces }: { provinces: Array<{ slug: string; nameTh: string; nameEn: string }> }) {
@@ -53,6 +66,9 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
   const [freeOnly, setFreeOnly] = useState(false);
   const [excludeVisitedPlaces, setExcludeVisitedPlaces] = useState(false);
   const [days, setDays] = useState(2);
+  const [travelers, setTravelers] = useState(2);
+  const [tripBudget, setTripBudget] = useState("");
+  const [requireHours, setRequireHours] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [noMatch, setNoMatch] = useState(false);
@@ -97,6 +113,9 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
           freeOnly,
           excludePlaceIds: excludeVisitedPlaces ? Object.keys(store.state.visits).slice(0, 2000) : [],
           days,
+          travelers,
+          tripBudget: tripBudget === "" ? null : Math.max(0, Number(tripBudget) || 0),
+          requireKnownHours: requireHours,
         }),
       });
       if (!res.ok) throw new Error();
@@ -148,7 +167,13 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
       })),
     );
     const trip = await store.createTrip(
-      { name: t("random.tripTitle", { days: tripRes.days.length, province: localName(tripRes.province, locale) }), provinceSlug: tripRes.province.slug },
+      {
+        name: t("random.tripTitle", { days: tripRes.days.length, province: localName(tripRes.province, locale) }),
+        provinceSlug: tripRes.province.slug,
+        travelerCount: travelers,
+        budget: tripBudget === "" ? null : Math.max(0, Number(tripBudget) || 0),
+        travelStyles: [],
+      },
       refs,
     );
     if (trip) setTripSaved(true);
@@ -291,6 +316,28 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
               </div>
             </fieldset>
           )}
+          {tab === "trip" && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="r-trav" className="label">
+                    {t("trips.travelers")}
+                  </label>
+                  <input id="r-trav" type="number" min={1} max={50} className="input" value={travelers} onChange={(e) => setTravelers(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} />
+                </div>
+                <div>
+                  <label htmlFor="r-tbudget" className="label">
+                    {t("trips.budget")}
+                  </label>
+                  <input id="r-tbudget" type="number" min={0} step={100} inputMode="numeric" className="input" value={tripBudget} onChange={(e) => setTripBudget(e.target.value)} />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={requireHours} onChange={(e) => setRequireHours(e.target.checked)} className="h-4 w-4 accent-forest-700" />
+                {t("random.requireHours")}
+              </label>
+            </>
+          )}
           {tab !== "province" && (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={excludeVisitedPlaces} onChange={(e) => setExcludeVisitedPlaces(e.target.checked)} className="h-4 w-4 accent-forest-700" />
@@ -313,7 +360,7 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
             </button>
           </div>
         )}
-        {noMatch && !loading && <div className="card p-6 text-center muted">{t("random.noMatch")}</div>}
+        {noMatch && !loading && <div className="card p-6 text-center muted" role="status">{tab === "trip" ? t("random.noMatchTrip") : t("random.noMatch")}</div>}
 
         {tab === "province" && provRes && !noMatch && (
           <article className="card overflow-hidden">
@@ -370,12 +417,20 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
                 {tripRes.warnings.map((w) => (
                   <li key={w}>
                     {t(
-                      `random.${({ few_places: "warnFew", no_food_data: "warnNoFood", opening_hours_unknown: "warnHours", straight_line_distance: "warnStraight" } as Record<string, string>)[w] ?? "warnStraight"}`,
+                      `random.${({ few_places: "warnFew", no_food_data: "warnNoFood", no_stay_data: "warnNoStay", opening_hours_unknown: "warnHours", straight_line_distance: "warnStraight", budget_unverifiable: "warnBudgetUnverifiable", known_cost_exceeds_budget: "warnOverBudget" } as Record<string, string>)[w] ?? "warnStraight"}`,
                     )}
                   </li>
                 ))}
               </ul>
             </div>
+            <p className="rounded-xl bg-sage-100 px-4 py-3 text-sm">
+              {t("random.knownCost", {
+                min: Math.round(tripRes.knownCost.min),
+                max: Math.round(tripRes.knownCost.max),
+                travelers: tripRes.travelers,
+              })}{" "}
+              {tripRes.unpricedStops > 0 && <span className="text-[#8a6416]">{t("random.unpricedStops", { count: tripRes.unpricedStops })}</span>}
+            </p>
             <PointsMap
               label={t("trips.routeMap")}
               route
@@ -387,7 +442,7 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
                 label: localName(s.place, locale),
                 href: `/thailand/${s.place.provinceSlug}/${s.place.slug}`,
                 order: i + 1,
-                color: s.role === "food" ? "#c4693f" : "#234f39",
+                color: s.role === "food" ? "#c4693f" : s.role === "stay" ? "#c99a3b" : "#234f39",
               }))}
             />
             {tripRes.days.map((d, di) => (
@@ -404,7 +459,7 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
                             {localName(s.place, locale)}
                           </Link>
                           <p className="text-xs muted">
-                            {t(`random.${s.role === "food" ? "roleFood" : s.role === "activity" ? "roleActivity" : "roleSight"}`)} · {t(`categories.${s.place.category}`)}
+                            {t(`random.${s.role === "food" ? "roleFood" : s.role === "activity" ? "roleActivity" : s.role === "stay" ? "roleStay" : "roleSight"}`)} · {t(`categories.${s.place.category}`)}
                             {s.kmFromPrevious != null && ` · ${t("random.fromPrev", { km: s.kmFromPrevious })}`}
                           </p>
                           {s.openingHours && <p className="font-mono text-xs muted">{s.openingHours}</p>}
@@ -422,11 +477,13 @@ export function RandomClient({ provinces }: { provinces: Array<{ slug: string; n
               <button type="button" className="btn btn-secondary" onClick={spin}>
                 {t("random.spinAgain")}
               </button>
-              {tripSaved && (
-                <Link href="/trips" className="text-sm font-semibold text-forest-700 underline" role="status">
-                  {t("random.tripSaved")}
-                </Link>
-              )}
+              <span role="status">
+                {tripSaved && (
+                  <Link href="/trips" className="text-sm font-semibold text-forest-700 underline">
+                    {t("random.tripSaved")}
+                  </Link>
+                )}
+              </span>
             </div>
           </div>
         )}

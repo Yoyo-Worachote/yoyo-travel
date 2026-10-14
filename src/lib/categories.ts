@@ -38,15 +38,16 @@ export const COMPANION_CATEGORIES: Record<Companion, string[]> = {
   friends: ["activity", "beach", "island", "market", "restaurant", "waterfall"],
 };
 
-/** Filter groups on the province page. */
+/** Filter groups on the province page / trip planner. */
 export const CATEGORY_GROUPS = {
   nature: ["national_park", "nature", "waterfall", "cave", "mountain", "viewpoint", "park"],
   beach: ["beach", "island"],
-  culture: ["temple", "history", "museum"],
+  culture: ["temple", "history", "museum", "attraction"],
   shopping: ["market", "shopping"],
   food: ["restaurant", "cafe"],
-  stay: ["hotel", "hostel", "guest_house", "motel", "apartment"],
+  stay: ["hotel", "resort", "hostel", "guest_house", "motel", "apartment"],
   activities: ["activity"],
+  transport: ["transport"],
 } as const;
 export type CategoryGroup = keyof typeof CATEGORY_GROUPS;
 export const CATEGORY_GROUP_IDS = Object.keys(CATEGORY_GROUPS) as CategoryGroup[];
@@ -62,4 +63,37 @@ export function interestsOfCategory(category: string): Interest[] {
   return INTERESTS.filter((i) => INTEREST_CATEGORIES[i].includes(category));
 }
 
-export const KIND_ORDER: PlaceKind[] = ["attraction", "activity", "restaurant", "cafe", "accommodation"];
+export const KIND_ORDER: PlaceKind[] = ["attraction", "activity", "restaurant", "cafe", "accommodation", "transport"];
+
+/** The 10 discovery categories on /places (each maps to concrete place categories). */
+export const EXPLORE_CATEGORIES = {
+  attractions: ["attraction", "temple", "history", "museum", "viewpoint", "park"],
+  restaurants: ["restaurant"],
+  cafes: ["cafe"],
+  hotels: ["hotel", "motel", "apartment"],
+  resorts: ["resort"],
+  hostels: ["hostel", "guest_house"],
+  activities: ["activity"],
+  nature: ["national_park", "nature", "waterfall", "beach", "island", "mountain", "cave"],
+  shopping: ["market", "shopping"],
+  transport: ["transport"],
+} as const;
+export type ExploreCategory = keyof typeof EXPLORE_CATEGORIES;
+export const EXPLORE_CATEGORY_IDS = Object.keys(EXPLORE_CATEGORIES) as ExploreCategory[];
+
+/** Facilities that can be filtered (only when the source tags them). */
+export const AMENITIES = [
+  "wifi",
+  "wheelchair",
+  "air_conditioning",
+  "parking",
+  "pool",
+  "outdoor_seating",
+  "vegetarian",
+  "vegan",
+  "halal",
+  "takeaway",
+  "delivery",
+  "reservation",
+] as const;
+export type Amenity = (typeof AMENITIES)[number];

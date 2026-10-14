@@ -5,6 +5,7 @@ import { COMPANIONS, INTERESTS } from "@/lib/categories";
 import { randomPlace, randomProvince, randomTrip, type RandomPlace } from "@/lib/random";
 import type { PlaceKind, RegionId } from "@/lib/types";
 import { ensureLiveCatalog } from "@/lib/catalog-live";
+import { providerPriceFor } from "@/lib/pricing";
 
 const slug = z.string().regex(/^[a-z0-9-]+$/).max(60);
 const placeId = z.string().regex(/^[A-Za-z0-9-]+$/).max(80);
@@ -27,6 +28,9 @@ const Body = z.object({
   freeOnly: z.boolean().default(false),
   excludePlaceIds: z.array(placeId).max(2000).default([]),
   days: z.number().int().min(1).max(3).default(2),
+  travelers: z.number().int().min(1).max(50).default(2),
+  tripBudget: z.number().min(0).max(10_000_000).nullish(),
+  requireKnownHours: z.boolean().default(false),
 });
 
 function toRandomPlace(p: ReturnType<typeof getPlaces>[number]): RandomPlace {
@@ -39,6 +43,10 @@ function toRandomPlace(p: ReturnType<typeof getPlaces>[number]): RandomPlace {
     lng: p.lng,
     fee: p.fee ?? null,
     openingHours: p.openingHours ?? null,
+    price: (() => {
+      const pp = providerPriceFor(p);
+      return pp ? { min: pp.min, max: pp.max, perPerson: pp.perPerson } : null;
+    })(),
   };
 }
 
@@ -106,13 +114,19 @@ export async function POST(request: Request) {
     interests: f.interests,
     companion: f.companion ?? null,
     excludePlaceIds: f.excludePlaceIds,
+    travelers: f.travelers,
+    budget: f.tripBudget ?? null,
+    requireKnownHours: f.requireKnownHours,
   });
-  if (!plan) return NextResponse.json({ result: null });
+  if (!plan) return NextResponse.json({ result: null, reason: "not_enough_data", provinceSlug });
   const p = getProvince(provinceSlug)!;
   return NextResponse.json({
     result: {
       province: { slug: p.slug, nameTh: p.nameTh, nameEn: p.nameEn, region: p.region },
       warnings: plan.warnings,
+      knownCost: plan.knownCost,
+      unpricedStops: plan.unpricedStops,
+      travelers: plan.travelers,
       days: plan.days.map((d) => ({
         day: d.day,
         stops: d.stops.map((s) => ({ ...s, place: toPlaceSummary(getPlaceById(s.placeId)!) })),

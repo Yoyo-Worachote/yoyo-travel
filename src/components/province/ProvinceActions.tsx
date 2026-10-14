@@ -56,7 +56,7 @@ export function ProvinceActions({ slug, name }: { slug: string; name: string }) 
 export function ProvinceProgress({ slug, placeIds }: { slug: string; placeIds: string[] }) {
   const t = useTranslations("province");
   const { state, mode } = useTravelStore();
-  if (mode === "loading" || mode === "guest") return null;
+  if (mode === "loading") return null;
   const visited = placeIds.filter((id) => state.visits[id]).length;
   const status = state.provinces[slug]?.status;
   return (

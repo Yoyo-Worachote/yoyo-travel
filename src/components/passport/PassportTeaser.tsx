@@ -9,7 +9,7 @@ import type { RegionId } from "@/lib/types";
 
 export function PassportTeaser({ provinces }: { provinces: Array<{ slug: string; region: RegionId }> }) {
   const t = useTranslations();
-  const { state, mode } = useTravelStore();
+  const { state, mode, authConfigured } = useTravelStore();
   if (mode === "loading") return <div className="h-32 rounded-[var(--radius-card)] skeleton" aria-hidden="true" />;
   const m = computePassport(state, provinces);
   return (
@@ -21,43 +21,30 @@ export function PassportTeaser({ provinces }: { provinces: Array<{ slug: string;
         <h2 id="passport-teaser" className="text-xl font-bold">
           {t("home.passportTitle")}
         </h2>
-        {mode === "guest" ? (
-          <p className="text-sm muted">{t("auth.signInToSave")}</p>
-        ) : (
-          <>
-            <p className="text-sm muted">
-              {t("passport.visitedProvinces")}: <strong className="text-forest-800">{m.visitedProvinces}/77</strong> ·{" "}
-              {t("passport.visitedPlaces")}: <strong className="text-forest-800">{m.visitedPlaces}</strong>
-            </p>
-            <div
-              className="mt-3 h-2.5 w-full max-w-md overflow-hidden rounded-full bg-sage-100"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={m.progressPct}
-              aria-label={t("passport.progress")}
-            >
-              <div className="h-full rounded-full bg-forest-600" style={{ width: `${m.progressPct}%` }} />
-            </div>
-          </>
-        )}
+        <p className="text-sm muted">
+          {t("passport.visitedProvinces")}: <strong className="text-forest-800">{m.visitedProvinces}/77</strong> ·{" "}
+          {t("passport.visitedPlaces")}: <strong className="text-forest-800">{m.visitedPlaces}</strong>
+        </p>
+        <div
+          className="mt-3 h-2.5 w-full max-w-md overflow-hidden rounded-full bg-sage-100"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={m.progressPct}
+          aria-label={t("passport.progress")}
+        >
+          <div className="h-full rounded-full bg-forest-600" style={{ width: `${m.progressPct}%` }} />
+        </div>
+        {mode === "local" && authConfigured && <p className="mt-2 text-xs muted">{t("auth.guestNotSynced")}</p>}
       </div>
       <div className="flex flex-wrap gap-2">
-        {mode === "guest" ? (
-          <Link href="/login" className="btn btn-primary">
-            {t("auth.signIn")}
-          </Link>
-        ) : (
-          <>
-            <Link href="/passport" className="btn btn-primary">
-              <BookMarked className="h-4 w-4" aria-hidden="true" /> {t("home.passportCta")}
-            </Link>
-            <Link href="/wishlist" className="btn btn-secondary">
-              <Heart className="h-4 w-4" aria-hidden="true" /> {t("home.wishlistCta")}
-              {m.wishlistCount > 0 && <span className="badge">{m.wishlistCount}</span>}
-            </Link>
-          </>
-        )}
+        <Link href="/passport" className="btn btn-primary">
+          <BookMarked className="h-4 w-4" aria-hidden="true" /> {t("home.passportCta")}
+        </Link>
+        <Link href="/wishlist" className="btn btn-secondary">
+          <Heart className="h-4 w-4" aria-hidden="true" /> {t("home.wishlistCta")}
+          {m.wishlistCount > 0 && <span className="badge">{m.wishlistCount}</span>}
+        </Link>
       </div>
     </section>
   );

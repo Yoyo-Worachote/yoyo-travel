@@ -15,7 +15,8 @@
     "sync:places": "node scripts/sync/places-wikidata.mjs",
     "sync:osm": "node scripts/sync/osm.mjs",
     "db:seed-sql": "node scripts/db/generate-seed.mjs",
-    "verify:data": "node scripts/sync/verify.mjs"
+    "verify:data": "node scripts/sync/verify.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -34,6 +35,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.9",
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.22",
     "@types/node": "^22.20.5",

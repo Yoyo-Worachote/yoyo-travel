@@ -15,6 +15,8 @@ npm run dev                  # http://localhost:3000
 ```
 
 Production build: `npm run build && npm start`. All checks: `npm run check`.
+Browser tests (Playwright, desktop + mobile): `npx playwright install chromium` once, then
+`npm run build && npm run test:e2e` (starts `npm start` itself, or set `E2E_BASE_URL`).
 
 Behind a corporate proxy, Node's `fetch` (used by the sync scripts) needs
 `NODE_USE_ENV_PROXY=1` (Node ≥ 22.21) together with `HTTPS_PROXY`.
@@ -41,6 +43,27 @@ User records written before the seed is loaded will fail (foreign keys to `place
 so load the seed before inviting users. After re-running the sync scripts, regenerate
 and re-apply the seed (it upserts).
 
+### Username + password accounts
+
+- Supabase → Authentication → Providers → **Email**: enabled, “Confirm email” ON (recommended).
+- Users register with **username + email + password**. Usernames are unique (DB constraint +
+  server check); passwords are handled only by Supabase Auth (hashed), never by this app.
+- **Sign in with username** needs `SUPABASE_SERVICE_ROLE_KEY` (server-only env var, never
+  `NEXT_PUBLIC_`). It is used for one RPC, `auth_email_for_username`, that only the service role
+  may execute. Without it users sign in with their email; everything else works.
+- Email templates (Authentication → Email Templates) can stay default; confirmation and
+  password-reset links come back to `/auth/callback`, so add these Redirect URLs:
+  `http://localhost:3000/auth/callback`, `https://<your-domain>/auth/callback`.
+- Password reset: `/forgot-password` → email link → `/account/reset-password`.
+- Self-service account deletion is on `/account` (RPC `delete_my_account`, cascades all user data).
+
+### Guest mode and importing guest data
+
+Without signing in, everything (trips, wishlist, passport) works and is stored in the browser's
+localStorage (`yoyo-travel:demo-state:v1`). After a user signs in, the app offers to import those
+records into the account; the import skips anything the account already has, so it never creates
+duplicates and can be retried safely.
+
 ## 3. Google sign-in (via Supabase Auth)
 
 1. Google Cloud Console → APIs & Services → **OAuth consent screen**: app name, support email,
@@ -63,6 +86,13 @@ Server-side only; keys are never sent to the browser.
 - With both set, Gemini is used unless `AI_PROVIDER=openai`.
 - Rate limit: `CHAT_RATE_LIMIT_PER_MIN` (default 8 per IP per server instance, in memory).
   For strict limits across serverless instances, back it with a shared store (e.g. Redis).
+
+## 5a. Live place data (optional, paid)
+
+- **Google Places API (New)**: set `GOOGLE_PLACES_API_KEY` (server-only). Place pages then show
+  rating, review count and price range from Google with attribution, fetched on demand and not
+  cached (Google terms). Restrict the key to the Places API and set a budget alert in Google Cloud.
+- Without the key the page says no rating data is available — nothing is estimated.
 
 ## 5. Web search for chat
 
@@ -90,7 +120,9 @@ The CSP automatically allows the configured tile host.
 ```bash
 npm run sync:provinces   # Wikidata + Wikipedia summaries + Commons images + geoBoundaries polygons
 npm run sync:places      # Wikidata attractions + Commons images (≈ 15 min, polite pacing)
-npm run sync:osm         # OSM restaurants/cafes/stays/activities via Overpass (≈ 30–60 min)
+npm run sync:osm         # OSM venues via Overpass; saves after every province (hours when Overpass is busy)
+npm run sync:osm -- nan  # re-sync selected provinces only (others keep their data)
+npm run verify:data      # coverage, duplicates, province links, required fields
 npm run db:seed-sql      # regenerate supabase/seed.sql
 ```
 

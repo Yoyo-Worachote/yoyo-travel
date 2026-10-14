@@ -1,23 +1,12 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { getTranslations } from "next-intl/server";
-import { SearchClient } from "@/components/search/SearchClient";
-import { getProvinces } from "@/lib/catalog";
+import { redirect } from "next/navigation";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("search");
-  return { title: t("title") };
-}
-
-export default async function SearchPage() {
-  const t = await getTranslations("search");
-  const provinces = getProvinces().map((p) => ({ slug: p.slug, nameTh: p.nameTh, nameEn: p.nameEn }));
-  return (
-    <div className="container-page py-10">
-      <h1 className="mb-6 text-3xl font-bold">{t("title")}</h1>
-      <Suspense fallback={<div className="h-14 rounded-full skeleton" />}>
-        <SearchClient provinces={provinces} />
-      </Suspense>
-    </div>
-  );
+/** Search now lives in the Places explorer; keep old links working. */
+export default async function SearchPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
+  const next = new URLSearchParams();
+  for (const key of ["q", "province"]) {
+    const v = sp[key];
+    if (v) next.set(key, v.slice(0, 100));
+  }
+  redirect(`/places${next.toString() ? `?${next}` : ""}`);
 }
