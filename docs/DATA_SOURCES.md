@@ -34,6 +34,21 @@
 
 This is a sample of well-documented places, **not** an exhaustive list.
 
+Snapshot synced 2026-10-14 (check with `npm run verify:data`):
+
+| | Count |
+|---|---|
+| Provinces | 77/77 (TH/EN names, polygon, Wikipedia summary TH+EN); 75 with a licensed cover photo (Loei, Nan: none on Wikidata) |
+| Wikidata attractions | 2,383 — every province has some (13–60 each) |
+| OSM venues | 2,775 — every province has restaurants, cafes and accommodation (8–44 each) |
+| In the app / seed | 5,152 places (6 OSM POIs that point to an existing Wikidata item are merged away) |
+| Licensed photos | 1,184 place photos |
+
+Overpass returned HTTP 504 for Chaiyaphum and Chiang Rai on the first pass; they were re-synced with
+retries, a fallback endpoint and partial-result detection (`remark` timeouts are treated as failures).
+Duplicates (same name ≤ 300 m) are removed during sync; about 1% of OSM venues sit just across a
+border of the simplified polygons and keep the province OSM assigned.
+
 ## Data labels shown to users
 
 `Provider data` (Wikidata/OSM as fetched), `Editor's pick` / `Community` (manual admin entries),

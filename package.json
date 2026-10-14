@@ -14,7 +14,8 @@
     "sync:provinces": "node scripts/sync/provinces.mjs",
     "sync:places": "node scripts/sync/places-wikidata.mjs",
     "sync:osm": "node scripts/sync/osm.mjs",
-    "db:seed-sql": "node scripts/db/generate-seed.mjs"
+    "db:seed-sql": "node scripts/db/generate-seed.mjs",
+    "verify:data": "node scripts/sync/verify.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

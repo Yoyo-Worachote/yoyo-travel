@@ -75,7 +75,10 @@ async function main() {
   );
 
   const catIds = new Set(CATEGORIES.map((c) => c[0]));
-  const places = [...wd.places, ...osm.places].filter((p) => catIds.has(p.category));
+  // Same rule as the app catalog: an OSM POI tagged with a Wikidata item we already have is a duplicate.
+  const wdIds = new Set(wd.places.map((p) => p.source.externalId));
+  const osmPlaces = osm.places.filter((p) => !p.wikidataRef || !wdIds.has(p.wikidataRef));
+  const places = [...wd.places, ...osmPlaces].filter((p) => catIds.has(p.category));
   const seen = new Set();
   const rows = [];
   for (const p of places) {

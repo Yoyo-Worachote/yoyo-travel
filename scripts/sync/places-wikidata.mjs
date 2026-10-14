@@ -16,6 +16,7 @@ import {
   readJson,
   sleep,
   slugify,
+  dedupePlaces,
 } from "./lib.mjs";
 
 // Wikidata class → app category. Order = priority when an item has several classes.
@@ -258,7 +259,9 @@ async function main() {
     };
   });
 
-  const all = [...keep, ...places].sort(
+  const deduped = dedupePlaces([...keep, ...places]);
+  if (deduped.dropped.length) console.log(`dropped duplicates: ${deduped.dropped.join(", ")}`);
+  const all = deduped.places.sort(
     (a, b) => a.provinceSlug.localeCompare(b.provinceSlug) || b.wikiSitelinks - a.wikiSitelinks,
   );
   await writeJson(outFile, {

@@ -72,6 +72,30 @@ await check("unknown province → 404", async () => {
   assert((await get("/thailand/atlantis")).status === 404, "expected 404");
 });
 
+await check("all 77 province routes return 200", async () => {
+  const geo = await (await get("/geo/thailand-provinces.geojson")).json();
+  const bad = [];
+  for (const f of geo.features) {
+    const res = await get(`/thailand/${f.properties.slug}`);
+    if (res.status !== 200) bad.push(`${f.properties.slug}:${res.status}`);
+  }
+  assert(bad.length === 0, bad.join(", "));
+});
+
+await check("unknown place → 404", async () => {
+  assert((await get("/thailand/chiang-mai/not-a-real-place")).status === 404, "expected 404");
+});
+
+await check("previously failing provinces now list OSM restaurants", async () => {
+  for (const slug of ["chaiyaphum", "chiang-rai"]) {
+    const r = await (await get(`/api/search?province=${slug}&group=food&limit=5`)).json();
+    assert(r.total > 0, `${slug} has no food places`);
+    const p = r.places.find((x) => x.provider === "osm");
+    assert(p, `${slug} has no OSM venue`);
+    assert((await get(`/thailand/${slug}/${p.slug}`)).status === 200, `${slug} venue page failed`);
+  }
+});
+
 await check("place route with source + attribution", async () => {
   const search = await (await get("/api/search?q=Doi%20Inthanon&limit=1")).json();
   const p = search.places[0];

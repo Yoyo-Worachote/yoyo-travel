@@ -5,19 +5,77 @@
 // OSM does not carry prices or ratings, so none are produced here.
 // Usage: node scripts/sync/osm.mjs [province-slug ...]
 import path from "node:path";
-import { OUT_DIR, fetchWithRetry, writeJson, readJson, sleep, slugify } from "./lib.mjs";
+import { OUT_DIR, fetchWithRetry, writeJson, readJson, sleep, slugify, dedupePlaces } from "./lib.mjs";
 
 const OVERPASS = process.env.OVERPASS_URL ?? "https://overpass-api.de/api/interpreter";
 const PICK = { restaurant: 14, cafe: 8, accommodation: 14, activity: 8 };
 
-function query(iso) {
-  return `[out:json][timeout:120];
+const ENDPOINTS = [OVERPASS, "https://overpass.kumi.systems/api/interpreter"];
+
+const PARTS = [
+  `nwr["amenity"="restaurant"]["name"](area.a)->.r; .r out center tags 250;`,
+  `nwr["amenity"="cafe"]["name"](area.a)->.c; .c out center tags 150;`,
+  `nwr["tourism"~"^(hotel|hostel|guest_house|motel|apartment)$"]["name"](area.a)->.h; .h out center tags 250;`,
+  `nwr["tourism"~"^(viewpoint|theme_park|zoo|aquarium)$"]["name"](area.a)->.v; .v out center tags 100;
+nwr["leisure"~"^(water_park|nature_reserve)$"]["name"](area.a)->.w; .w out center tags 60;`,
+];
+
+function query(iso, parts = PARTS) {
+  return `[out:json][timeout:170];
 area["ISO3166-2"="${iso}"]["admin_level"="4"]->.a;
-nwr["amenity"="restaurant"]["name"](area.a)->.r; .r out center tags 250;
-nwr["amenity"="cafe"]["name"](area.a)->.c; .c out center tags 150;
-nwr["tourism"~"^(hotel|hostel|guest_house|motel|apartment)$"]["name"](area.a)->.h; .h out center tags 250;
-nwr["tourism"~"^(viewpoint|theme_park|zoo|aquarium)$"]["name"](area.a)->.v; .v out center tags 100;
-nwr["leisure"~"^(water_park|nature_reserve)$"]["name"](area.a)->.w; .w out center tags 60;`;
+${parts.join("\n")}`;
+}
+
+/** One Overpass request; a 200 whose `remark` reports a timeout/error is a failure (partial data). */
+async function runQuery(endpoint, data, label) {
+  const res = await fetchWithRetry(
+    endpoint,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ data }).toString(),
+      timeoutMs: 200_000,
+    },
+    { label, retries: 3 },
+  );
+  const json = await res.json();
+  if (json.remark && /runtime error|timed out|out of memory/i.test(json.remark)) {
+    throw new Error(`partial result: ${json.remark.slice(0, 120)}`);
+  }
+  return json.elements ?? [];
+}
+
+/**
+ * Whole-province query first; on failure try the fallback endpoint, then split
+ * into one smaller query per category (each with its own retries).
+ */
+async function fetchProvince(prov) {
+  for (const ep of ENDPOINTS) {
+    try {
+      return await runQuery(ep, query(prov.iso), `overpass ${prov.slug} @${new URL(ep).host}`);
+    } catch (e) {
+      console.warn(`  ${prov.slug}: combined query failed on ${new URL(ep).host}: ${e.message}`);
+      await sleep(10_000);
+    }
+  }
+  const all = [];
+  for (const [i, part] of PARTS.entries()) {
+    let lastErr;
+    let ok = false;
+    for (const ep of ENDPOINTS) {
+      try {
+        all.push(...(await runQuery(ep, query(prov.iso, [part]), `overpass ${prov.slug} part ${i + 1}`)));
+        ok = true;
+        break;
+      } catch (e) {
+        lastErr = e;
+        await sleep(10_000);
+      }
+    }
+    if (!ok) throw lastErr;
+    await sleep(3000);
+  }
+  return all;
 }
 
 function classify(tags) {
@@ -103,18 +161,8 @@ async function main() {
   for (const prov of provinces) {
     if (only.length && !only.includes(prov.slug)) continue;
     try {
-      const res = await fetchWithRetry(
-        OVERPASS,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ data: query(prov.iso) }).toString(),
-          timeoutMs: 180_000,
-        },
-        { label: `overpass ${prov.slug}` },
-      );
-      const json = await res.json();
-      const records = (json.elements ?? []).map((el) => toRecord(el, prov.slug, fetchedAt)).filter(Boolean);
+      const elements = await fetchProvince(prov);
+      const records = elements.map((el) => toRecord(el, prov.slug, fetchedAt)).filter(Boolean);
       const picked = [];
       for (const kind of Object.keys(PICK)) {
         const ofKind = records
@@ -141,7 +189,13 @@ async function main() {
 
   // keep previous data for provinces not refreshed in this run
   const kept = existing.places.filter((p) => !done.has(p.provinceSlug));
-  const all = [...kept, ...result].sort((a, b) => a.provinceSlug.localeCompare(b.provinceSlug));
+  // Drop OSM POIs that duplicate a Wikidata place (same name ≤ 300 m) or each other.
+  const wd = (await readJson(path.join(OUT_DIR, "places-wikidata.json")).catch(() => ({ places: [] }))).places;
+  const merged = dedupePlaces([...wd.map((p) => ({ ...p, wikiSitelinks: (p.wikiSitelinks ?? 0) + 1000 })), ...kept, ...result]);
+  const keepIds = new Set(merged.places.map((p) => p.id));
+  const osmDropped = merged.dropped.filter((d) => d.startsWith("osm-"));
+  if (osmDropped.length) console.log(`dropped ${osmDropped.length} OSM duplicates`);
+  const all = [...kept, ...result].filter((p) => keepIds.has(p.id)).sort((a, b) => a.provinceSlug.localeCompare(b.provinceSlug));
   await writeJson(outFile, {
     source: "OpenStreetMap via Overpass API — © OpenStreetMap contributors, ODbL 1.0",
     fetchedAt,

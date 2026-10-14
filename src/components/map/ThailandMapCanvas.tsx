@@ -104,7 +104,9 @@ export default function ThailandMapCanvas({
     const markMoved = () => (userMoved = true);
     container.addEventListener("pointerdown", markMoved);
     container.addEventListener("wheel", markMoved, { passive: true });
+    let disposed = false;
     const fit = () => {
+      if (disposed) return;
       map.invalidateSize();
       if (!userMoved) map.fitBounds(THAILAND_BOUNDS, { animate: false });
     };
@@ -123,10 +125,12 @@ export default function ThailandMapCanvas({
         });
       },
     };
-    requestAnimationFrame(fit);
+    const raf = requestAnimationFrame(fit);
     const ro = new ResizeObserver(fit);
     ro.observe(container);
     return () => {
+      disposed = true;
+      cancelAnimationFrame(raf);
       ro.disconnect();
       container.removeEventListener("pointerdown", markMoved);
       container.removeEventListener("wheel", markMoved);

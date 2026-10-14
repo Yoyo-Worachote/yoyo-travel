@@ -94,7 +94,7 @@ export function Header() {
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <Link href="/search" className="btn btn-ghost btn-sm" aria-label={t("search")}>
             <Search className="h-5 w-5" aria-hidden="true" />
           </Link>

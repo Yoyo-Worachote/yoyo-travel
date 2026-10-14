@@ -149,3 +149,37 @@ export function slugify(s) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
 }
+
+const normName = (s) =>
+  (s ?? "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+function distKm(a, b) {
+  const r = (d) => (d * Math.PI) / 180;
+  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Drop duplicate records of the same real place (Wikidata sometimes has two
+ * items for one place): same normalized TH or EN name within maxKm.
+ * Keeps the better documented record (more sitelinks, then has image).
+ */
+export function dedupePlaces(places, maxKm = 0.3) {
+  const rank = (p) => (p.wikiSitelinks ?? 0) * 10 + (p.image ? 5 : 0) + (p.descriptionTh || p.descriptionEn ? 1 : 0);
+  const sorted = [...places].sort((a, b) => rank(b) - rank(a) || a.id.localeCompare(b.id));
+  const kept = [];
+  const byName = new Map();
+  const dropped = [];
+  for (const p of sorted) {
+    const names = [...new Set([normName(p.nameTh), normName(p.nameEn)])].filter((n) => n.length >= 3);
+    const dup = names.flatMap((n) => byName.get(n) ?? []).find((k) => distKm(k, p) <= maxKm);
+    if (dup) {
+      dropped.push(`${p.id} → kept ${dup.id}`);
+      continue;
+    }
+    kept.push(p);
+    for (const n of names) byName.set(n, [...(byName.get(n) ?? []), p]);
+  }
+  const keptIds = new Set(kept.map((p) => p.id));
+  return { places: places.filter((p) => keptIds.has(p.id)), dropped };
+}
